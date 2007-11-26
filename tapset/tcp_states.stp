@@ -1,0 +1,52 @@
+// Copyright (C) 2007, Red Hat Inc.
+// Arnaldo Carvalho de Melo <acme@redhat.com>
+//
+// This file is free software.  You can redistribute it and/or modify it
+// under the terms of the GNU General Public License (GPL), version 2.
+
+%{
+#include <net/tcp_states.h>
+%}
+
+global TCP_ESTABLISHED=1
+global TCP_SYN_SENT=2
+global TCP_SYN_RECV=3
+global TCP_FIN_WAIT1=4
+global TCP_FIN_WAIT2=5
+global TCP_TIME_WAIT=6
+global TCP_CLOSE=7
+global TCP_CLOSE_WAIT=8
+global TCP_LAST_ACK=9
+global TCP_LISTEN=10
+global TCP_CLOSING=11
+
+function tcp_state_name:string (state:long)
+%{
+	const char *s = "unknown";
+
+	switch (THIS->state) {
+	case TCP_ESTABLISHED:	s = "established"; break;
+	case TCP_SYN_SENT:	s = "syn_sent"; break;
+	case TCP_SYN_RECV:	s = "syn_recv"; break;
+	case TCP_FIN_WAIT1:	s = "fin_wait1"; break;
+	case TCP_FIN_WAIT2:	s = "fin_wait2"; break;
+	case TCP_TIME_WAIT:	s = "time_wait"; break;
+	case TCP_CLOSE:		s = "close"; break;
+	case TCP_CLOSE_WAIT:	s = "close_wait"; break;
+	case TCP_LAST_ACK:	s = "last_ack"; break;
+	case TCP_LISTEN:	s = "listen"; break;
+	case TCP_CLOSING:	s = "closing"; break;
+	}
+
+	strlcpy(THIS->__retvalue, s, MAXSTRINGLEN);
+%}
+
+probe tcp_state.tcp_close_state = kernel.function("tcp_close_state")
+{
+	sk = $sk
+}
+
+probe tcp_state.tcp_fin = kernel.function("tcp_fin")
+{
+	sk = $sk
+}

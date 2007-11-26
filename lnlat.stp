@@ -1,0 +1,139 @@
+#!/usr/bin/stap
+
+global stats_latency
+global stats_bufsize
+
+probe new_packet = kernel.function("__alloc_skb").return
+{
+	skb = $return
+}
+
+probe tcp_in = kernel.function("tcp_v4_rcv")
+{
+	sport = skb_tcphdr_sport($skb)
+	dport = skb_tcphdr_dport($skb)
+	saddr = skb_iphdr_saddr($skb)
+	daddr = skb_iphdr_daddr($skb)
+	len = $skb->len
+	timestamp = skb_tstamp($skb)
+}
+
+probe ip_in = kernel.function("ip_rcv")
+{
+	skb = $skb
+	saddr = skb_iphdr_saddr($skb)
+	daddr = skb_iphdr_daddr($skb)
+	protocol = skb_iphdr_protocol($skb)
+	len = $skb->len
+	timestamp = skb_tstamp($skb)
+}
+
+probe dev_out = kernel.function("dev_hard_start_xmit")
+{
+	sk = $skb->sk
+	len = $skb->len
+	timestamp = skb_tstamp($skb)
+	if (sk) {
+		sport = inet_sk_sport(sk)
+		dport = inet_sk_dport(sk)
+		saddr = inet_sk_saddr(sk)
+		daddr = inet_sk_daddr(sk)
+	}
+}
+
+probe dev_in = kernel.function("netif_rx"), kernel.function("netif_receive_skb")
+{
+	skb = $skb
+	len = $skb->len
+}
+
+probe user_in = kernel.function("skb_copy_datagram_iovec")
+{
+	skb = $skb
+	sk = $skb->sk
+	len = $len
+	timestamp = skb_tstamp($skb)
+	if (sk) {
+		dport = inet_sk_dport(sk)
+		sport = inet_sk_sport(sk)
+		saddr = inet_sk_saddr(sk)
+		daddr = inet_sk_daddr(sk)
+	}
+}
+
+probe new_packet
+{
+	if (skb)
+		skb_take_tstamp(skb)
+}
+
+probe dev_in
+{
+	if (skb)
+		skb_take_tstamp(skb)
+}
+
+function add_sample(table_id, saddr, sport, daddr, dport, timestamp, len)
+{
+	if (!daddr)
+		return 0
+
+	delay = get_cycles_sync() - timestamp
+
+	stats_latency[table_id, saddr, sport, daddr, dport] <<< delay
+	stats_bufsize[table_id, saddr, sport, daddr, dport] <<< len
+}
+
+probe dev_out
+{
+	if (sk)
+		add_sample("dev_out", saddr, sport, daddr, dport, timestamp, len)
+}
+
+probe ip_in
+{
+	if (protocol == IPPROTO_TCP) {
+		sport = skb_iphdr_tcp_sport(skb)
+		dport = skb_iphdr_tcp_dport(skb)
+
+		add_sample("ip_in", daddr, dport, saddr, sport, timestamp, len)
+	}
+}
+
+probe tcp_in
+{
+	add_sample("tcp_in", daddr, dport, saddr, sport, timestamp, len)
+}
+
+probe user_in
+{
+	add_sample("user_in", saddr, sport, daddr, dport, timestamp, len)
+}
+
+probe end
+{
+	printf("%8s %15.15s %5s %15s %5s %23s %18s\n",
+	       "", "", "", "", "", "latency(cycles)", "buffer size")
+	printf("%8.8s %15.15s %5s %15.15s %5s %8s %7s %9s %5s %5s %5s\n",
+	       "entry", "local address", "port", "remote address", "port",
+	       "avg", "min", "max", "avg", "min", "max")
+
+	foreach ([table_id, saddr, sport, daddr, dport] in stats_latency) {
+		if (saddr != last_saddr || sport != last_sport ||
+		    daddr != last_daddr || dport != last_dport) {
+			printf("-\n")
+			last_saddr = saddr
+			last_sport = sport
+			last_daddr = daddr
+			last_dport = dport
+		}
+		printf("%-8.8s %15.15s %5d %15.15s %5d %8d %7d %9d %5d %5d %5d\n",
+		       table_id, inet_sk_ntop(saddr), sport, inet_sk_ntop(daddr), dport,
+		       @avg(stats_latency[table_id, saddr, sport, daddr, dport]),
+		       @min(stats_latency[table_id, saddr, sport, daddr, dport]),
+		       @max(stats_latency[table_id, saddr, sport, daddr, dport]),
+		       @avg(stats_bufsize[table_id, saddr, sport, daddr, dport]),
+		       @min(stats_bufsize[table_id, saddr, sport, daddr, dport]),
+		       @max(stats_bufsize[table_id, saddr, sport, daddr, dport]))
+	}
+}

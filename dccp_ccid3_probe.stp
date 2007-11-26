@@ -1,0 +1,39 @@
+#!/usr/bin/stap
+
+global filter_dport = 5001
+global rtts
+global x_calcs
+global ipis
+
+probe dccp_user_out = module("dccp").function("dccp_sendmsg")
+{
+	dport = inet_sk_dport($sk)
+	x_calc = ccid3_hc_tx_sk_x_calc($sk)
+	rtt = ccid3_hc_tx_sk_rtt($sk)
+	ipi = ccid3_hc_tx_sk_ipi($sk)
+}
+
+probe dccp_user_out
+{
+	if (dport != filter_dport)
+		next
+
+	rtts <<< rtt
+	x_calcs <<< x_calc
+	ipis <<< ipi
+}
+
+probe end
+{
+	printf("rtt: count: %d, min: %d, max: %d, avg: %d\n",
+	       @count(rtts), @min(rtts), @max(rtts), @avg(rtts))
+	print(@hist_linear(rtts, 0, 1000, 20))
+
+	printf("x_calc: count: %d, min: %d, max: %d, avg: %d\n",
+	       @count(x_calcs), @min(x_calcs), @max(x_calcs), @avg(x_calcs))
+	print(@hist_linear(x_calcs, 0, 100000, 2000))
+
+	printf("ipi: count: %d, min: %d, max: %d, avg: %d\n",
+	       @count(ipis), @min(ipis), @max(ipis), @avg(ipis))
+	print(@hist_linear(ipis, 0, 600, 10))
+}

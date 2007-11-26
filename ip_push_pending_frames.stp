@@ -1,0 +1,44 @@
+#!/usr/bin/stap
+
+global ip_push_pending_frames_cnt
+
+probe ip_push_pending_frames = kernel.function("ip_push_pending_frames")
+{
+	sk = $sk
+}
+
+probe ip_push_pending_frames
+{
+	dport = inet_sk_dport(sk)
+	sport = inet_sk_sport(sk)
+	saddr = inet_sk_saddr(sk)
+	daddr = inet_sk_daddr(sk)
+	proto = sk_protocol(sk)
+
+	if (ip_push_pending_frames_cnt[proto, saddr, sport, daddr, dport])
+		ip_push_pending_frames_cnt[proto, saddr, sport, daddr, dport] += 1
+	else {
+		printf("%s %15.15s %5d %15.15s %5d: ip_push_pending_frames called!\n",
+		       sock_prot_num2str(proto),
+		       inet_sk_ntop(saddr), sport, inet_sk_ntop(daddr), dport)
+		ip_push_pending_frames_cnt[proto, saddr, sport, daddr, dport] = 1
+	}
+}
+
+probe begin
+{
+	print("started!\n")
+}
+
+probe end
+{
+	printf("%5.5s %15.15s %5s %15.15s %5s %s\n",
+	       "proto", "local address", "port", "remote address", "port",
+	       "ip_push_pending_frames#")
+	foreach ([proto, saddr, sport, daddr, dport] in ip_push_pending_frames_cnt) {
+		printf("%5.5s %15.15s %5d %15.15s %5d %9d\n",
+		       sock_prot_num2str(proto),
+		       inet_sk_ntop(saddr), sport, inet_sk_ntop(daddr), dport,
+		       ip_push_pending_frames_cnt[proto, saddr, sport, daddr, dport])
+	}
+}

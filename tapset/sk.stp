@@ -1,0 +1,24 @@
+// struct sock tapset
+// Copyright (C) 2007, Red Hat Inc.
+// Arnaldo Carvalho de Melo <acme@redhat.com>
+//
+// This file is free software.  You can redistribute it and/or modify it under
+// the terms of the GNU General Public License (GPL), version 2.
+
+%{
+#include <net/sock.h>
+%}
+
+function sk_state:long (sk:long)
+%{
+	struct sock_common *skc = (struct sock_common *)(long)THIS->sk;
+	THIS->__retvalue = kread(&(skc->skc_state));
+	CATCH_DEREF_FAULT();
+%}
+
+function sk_protocol:long (sk:long)
+%{
+	struct sock *sk = (struct sock *)(long)THIS->sk;
+	THIS->__retvalue = kread(&(sk->sk_protocol));
+	CATCH_DEREF_FAULT();
+%}

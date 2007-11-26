@@ -1,0 +1,50 @@
+// Copyright (C) 2007, Red Hat Inc.
+// Arnaldo Carvalho de Melo <acme@redhat.com>
+//
+// This file is free software.  You can redistribute it and/or modify it
+// under the terms of the GNU General Public License (GPL), version 2.
+
+%{
+#include <linux/tcp.h>
+#include <net/tcp.h>
+%}
+
+global TCP_NAGLE_OFF=1
+global TCP_NAGLE_CORK=2
+global TCP_NAGLE_PUSH=4
+
+function tcp_nagle_str:string (nagle:long)
+%{
+	char bf[32];
+
+	bf[0] = '\0';
+
+	if (THIS->nagle & TCP_NAGLE_OFF)
+		strcat(bf, "O");
+
+	if (THIS->nagle & TCP_NAGLE_CORK) {
+		if (bf[0] != '\0')
+			strcat(bf, "|");
+		strcat(bf, "C");
+	}
+
+	if (THIS->nagle & TCP_NAGLE_PUSH) {
+		if (bf[0] != '\0')
+			strcat(bf, "|");
+		strcat(bf, "P");
+	}
+
+	/* Default */
+	if (bf[0] == '\0') {
+		bf[0] = 'D';
+		bf[1] = '\0';
+	}
+
+	strlcpy(THIS->__retvalue, bf, MAXSTRINGLEN);
+%}
+
+function tcp_nagle:long (sk:long)
+%{
+	const struct tcp_sock *tp = tcp_sk((void *)(long)THIS->sk);
+	THIS->__retvalue = tp->nonagle;
+%}

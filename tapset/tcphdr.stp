@@ -1,0 +1,37 @@
+// tcp_hdr tapset
+// Copyright (C) 2007, Red Hat Inc.
+// Arnaldo Carvalho de Melo <acme@redhat.com>
+//
+// This file is free software.  You can redistribute it and/or modify it under
+// the terms of the GNU General Public License (GPL), version 2.
+
+%{
+#include <linux/in.h>
+#include <linux/tcp.h>
+%}
+
+function skb_tcphdr_sport:long (skb:long)
+%{
+	THIS->__retvalue = ntohs(tcp_hdr((struct sk_buff *)THIS->skb)->source);
+%}
+
+function skb_tcphdr_dport:long (skb:long)
+%{
+	THIS->__retvalue = ntohs(tcp_hdr((struct sk_buff *)THIS->skb)->dest);
+%}
+
+function skb_iphdr_tcp_sport:long (skb:long)
+%{
+	struct iphdr *iph = ip_hdr((struct sk_buff *)THIS->skb);
+	struct tcphdr *th = (void *)iph + (iph->ihl * 4);
+
+	THIS->__retvalue = ntohs(th->source);
+%}
+
+function skb_iphdr_tcp_dport:long (skb:long)
+%{
+	struct iphdr *iph = ip_hdr((struct sk_buff *)THIS->skb);
+	struct tcphdr *th = (void *)iph + (iph->ihl * 4);
+
+	THIS->__retvalue = ntohs(th->dest);
+%}

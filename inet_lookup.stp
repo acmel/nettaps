@@ -1,0 +1,15 @@
+#!/usr/bin/stap
+
+function inet_lookup(saddr: long, sport:long, daddr: long, dport:long)
+%{
+	saddr = inet_sk_saddr(sk)
+	daddr = inet_sk_daddr(sk)
+	sport = inet_sk_sport(sk)
+	dport = inet_sk_dport(sk)
+	printk("%s@%d -> %s@%d: %dus in CLOSE_WAIT state\n",
+	       inet_sk_ntop(saddr), sport, inet_sk_ntop(daddr), dport, park_time)
+%}
+
+probe begin
+{
+}

@@ -1,0 +1,44 @@
+// inet_sock tapset
+// Copyright (C) 2007, Red Hat Inc.
+// Arnaldo Carvalho de Melo <acme@redhat.com>
+//
+// This file is free software.  You can redistribute it and/or modify it under
+// the terms of the GNU General Public License (GPL), version 2.
+
+%{
+#include <net/inet_sock.h>
+#include <linux/in.h>
+%}
+
+function inet_sk_ntop:string (addr:long)
+%{
+	snprintf(THIS->__retvalue, MAXSTRINGLEN, NIPQUAD_FMT, NIPQUAD(THIS->addr));
+%}
+
+function inet_sk_saddr:long (sk:long)
+%{
+	struct inet_sock *inet = inet_sk((struct sock *)(long)THIS->sk);
+	THIS->__retvalue = kread(&(inet->saddr));
+	CATCH_DEREF_FAULT();
+%}
+
+function inet_sk_daddr:long (sk:long)
+%{
+	struct inet_sock *inet = inet_sk((struct sock *)(long)THIS->sk);
+	THIS->__retvalue = kread(&(inet->daddr));
+	CATCH_DEREF_FAULT();
+%}
+
+function inet_sk_sport:long (sk:long)
+%{
+	struct inet_sock *inet = inet_sk((struct sock *)(long)THIS->sk);
+	THIS->__retvalue = ntohs(kread(&(inet->sport)));
+	CATCH_DEREF_FAULT();
+%}
+
+function inet_sk_dport:long (sk:long)
+%{
+	struct inet_sock *inet = inet_sk((struct sock *)(long)THIS->sk);
+	THIS->__retvalue = ntohs(kread(&(inet->dport)));
+	CATCH_DEREF_FAULT();
+%}

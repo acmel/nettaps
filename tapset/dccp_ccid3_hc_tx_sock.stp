@@ -1,0 +1,39 @@
+// ccid3_hc_tx_sock tapset
+// Copyright (C) 2007, Red Hat Inc.
+// Arnaldo Carvalho de Melo <acme@redhat.com>
+//
+// This file is free software.  You can redistribute it and/or modify it under
+// the terms of the GNU General Public License (GPL), version 2.
+
+%{
+#include <linux/dccp.h>
+#include <linux/tfrc.h>
+
+struct ccid {
+        void *ccid_ops;
+        char ccid_priv[0];
+};
+
+static inline void *ccid_priv(const struct ccid *ccid)
+{
+	return (void *)ccid->ccid_priv;
+}
+%}
+
+function ccid3_hc_tx_sk_x_calc:long (sk:long)
+%{
+	struct tfrc_tx_info *tinfo = ccid_priv(dccp_sk((void *)THIS->sk)->dccps_hc_tx_ccid);
+	THIS->__retvalue = tinfo->tfrctx_x_calc;
+%}
+
+function ccid3_hc_tx_sk_rtt:long (sk:long)
+%{
+	struct tfrc_tx_info *tinfo = ccid_priv(dccp_sk((void *)THIS->sk)->dccps_hc_tx_ccid);
+	THIS->__retvalue = tinfo->tfrctx_rtt;
+%}
+
+function ccid3_hc_tx_sk_ipi:long (sk:long)
+%{
+	struct tfrc_tx_info *tinfo = ccid_priv(dccp_sk((void *)THIS->sk)->dccps_hc_tx_ccid);
+	THIS->__retvalue = tinfo->tfrctx_ipi;
+%}

@@ -1,0 +1,233 @@
+#!/usr/bin/stap
+
+global buffer_sizes
+global packet_sizes
+global tid_name
+global tcp_nagle_setting
+global tcp_delack_timer_cnt
+global tcp_keepalive_timer_cnt
+global tcp_write_timer_cnt
+global sys_writev_cnt
+global sys_poll_cnt
+global sys_select_cnt
+global sys_sched_yield_cnt
+
+global thread_thislock # short
+global thread_blocktime # 
+global FUTEX_WAIT = 0, FUTEX_WAKE = 1
+
+global lock_waits # long-lived stats on (tid,lock) blockage elapsed time
+
+probe syscall.futex {  
+	if (op != FUTEX_WAIT)
+		next  /* we don't care about originators of WAKE events */
+
+	tid = tid()
+	tid_name[tid] = execname()
+	thread_thislock[tid] = $uaddr
+	thread_blocktime[tid] = gettimeofday_us()
+}
+
+probe syscall.futex.return {  
+	tid = tid()
+	ts = thread_blocktime[tid]
+	if (ts) {
+		elapsed = gettimeofday_us() - ts
+		lock_waits[tid, thread_thislock[tid]] <<< elapsed
+		delete thread_blocktime[tid]
+		delete thread_thislock[tid]
+   }
+}
+
+probe syscall.poll
+{
+	tid = tid()
+	if (sys_poll_cnt[tid])
+		sys_poll_cnt[tid] += 1
+	else
+		sys_poll_cnt[tid] = 1
+}
+
+probe syscall.sched_yield
+{
+	tid = tid()
+	if (sys_sched_yield_cnt[tid])
+		sys_sched_yield_cnt[tid] += 1
+	else
+		sys_sched_yield_cnt[tid] = 1
+}
+
+probe syscall.select
+{
+	tid = tid()
+	if (sys_select_cnt[tid])
+		sys_select_cnt[tid] += 1
+	else
+		sys_select_cnt[tid] = 1
+}
+
+probe syscall.writev
+{
+	tid = tid()
+	if (sys_writev_cnt[tid])
+		sys_writev_cnt[tid] += 1
+	else
+		sys_writev_cnt[tid] = 1
+}
+
+probe tcp.delack_timer
+{
+	dport = inet_sk_dport(sk)
+	sport = inet_sk_sport(sk)
+	saddr = inet_sk_saddr(sk)
+	daddr = inet_sk_daddr(sk)
+
+	if (tcp_delack_timer_cnt[saddr, sport, daddr, dport])
+		tcp_delack_timer_cnt[saddr, sport, daddr, dport] += 1
+	else
+		tcp_delack_timer_cnt[saddr, sport, daddr, dport] = 1
+}
+
+probe tcp.keepalive_timer
+{
+	dport = inet_sk_dport(sk)
+	sport = inet_sk_sport(sk)
+	saddr = inet_sk_saddr(sk)
+	daddr = inet_sk_daddr(sk)
+
+	if (tcp_keepalive_timer_cnt[saddr, sport, daddr, dport])
+		tcp_keepalive_timer_cnt[saddr, sport, daddr, dport] += 1
+	else
+		tcp_keepalive_timer_cnt[saddr, sport, daddr, dport] = 1
+}
+
+probe tcp.write_timer
+{
+	dport = inet_sk_dport(sk)
+	sport = inet_sk_sport(sk)
+	saddr = inet_sk_saddr(sk)
+	daddr = inet_sk_daddr(sk)
+
+	if (tcp_write_timer_cnt[saddr, sport, daddr, dport])
+		tcp_write_timer_cnt[saddr, sport, daddr, dport] += 1
+	else
+		tcp_write_timer_cnt[saddr, sport, daddr, dport] = 1
+}
+
+probe tcp_sendmsg = kernel.function("tcp_sendmsg")
+{
+	sk = %( kernel_v < "2.6.23" %? $sk %: $sock->sk %)
+	size = $size
+}
+
+probe tcp_sendmsg
+{
+	dport = inet_sk_dport(sk)
+	sport = inet_sk_sport(sk)
+	saddr = inet_sk_saddr(sk)
+	daddr = inet_sk_daddr(sk)
+
+	buffer_sizes[tid(), saddr, sport, daddr, dport] <<< size
+	tcp_nagle_setting[saddr, sport, daddr, dport] = tcp_nagle(sk)
+	tid_name[tid()] = execname()
+}
+
+probe tcp_transmit_skb = kernel.function("tcp_transmit_skb")
+{
+	sk = $sk
+	dport = inet_sk_dport(sk)
+	sport = inet_sk_sport(sk)
+	saddr = inet_sk_saddr(sk)
+	daddr = inet_sk_daddr(sk)
+	size = $skb->len
+}
+
+/*
+ * TCP passing packet to IP
+ */
+probe tcp_transmit_skb
+{
+	packet_sizes[tid(), saddr, sport, daddr, dport] <<< size
+}
+
+/*
+ * Routine used when closing any of the INET protocols
+ */
+probe inet_release = kernel.function("inet_release")
+{
+	sk = $sock->sk
+	dport = inet_sk_dport(sk)
+	sport = inet_sk_sport(sk)
+	saddr = inet_sk_saddr(sk)
+	daddr = inet_sk_daddr(sk)
+}
+
+probe inet_release
+{
+	tid = tid()
+	printf("tid=%d, saddr=%s, sport=%d, daddr=%s, dport=%d\n",
+	       tid, inet_sk_ntop(saddr), sport, inet_sk_ntop(daddr), dport)
+	delete packet_sizes[tid, saddr, sport, daddr, dport]
+	delete buffer_sizes[tid, saddr, sport, daddr, dport]
+	delete tcp_nagle_setting[saddr, sport, daddr, dport]
+	delete tcp_delack_timer_cnt[saddr, sport, daddr, dport]
+	delete tcp_delack_timer_cnt[saddr, sport, daddr, dport]
+	delete tcp_write_timer_cnt[saddr, sport, daddr, dport]
+}
+
+function dump_stats()
+{
+	print("thread: tid name nrwritev nrpoll nrselect nrsched_yield\n")
+	foreach ([tid+] in tid_name)
+		printf("thread: %d %s %d %d %d %d\n",
+		       tid,
+		       tid_name[tid],
+		       sys_writev_cnt[tid],
+		       sys_poll_cnt[tid],
+		       sys_select_cnt[tid],
+		       sys_sched_yield_cnt[tid])
+
+	print("lock: tid futex nrcontentions avg min max\n")
+	foreach ([tid+, lock] in lock_waits)
+		printf("lock: %u %p %u %u %u %u\n",
+		       tid,
+		       lock,
+		       @count(lock_waits[tid, lock]),
+		       @avg(lock_waits[tid, lock]),
+		       @min(lock_waits[tid, lock]),
+		       @max(lock_waits[tid, lock]))
+
+	print("connection: tid saddr sport daddr dport nrbf avgbfsz minbfsz maxbfsz nrpkts avgpktsz minpktsz maxpktsz nagle da ka wr\n")
+
+	foreach ([tid+, saddr, sport, daddr, dport] in buffer_sizes) {
+		printf("connection: %u %s %u %s %u %u %u %u %u %u %u %u %u %s %u %u %u\n",
+		       tid,
+		       inet_sk_ntop(saddr),
+		       sport,
+		       inet_sk_ntop(daddr),
+		       dport,
+		       @count(buffer_sizes[tid, saddr, sport, daddr, dport]),
+		       @avg(buffer_sizes[tid, saddr, sport, daddr, dport]),
+		       @min(buffer_sizes[tid, saddr, sport, daddr, dport]),
+		       @max(buffer_sizes[tid, saddr, sport, daddr, dport]),
+		       @count(packet_sizes[tid, saddr, sport, daddr, dport]),
+		       @avg(packet_sizes[tid, saddr, sport, daddr, dport]),
+		       @min(packet_sizes[tid, saddr, sport, daddr, dport]),
+		       @max(packet_sizes[tid, saddr, sport, daddr, dport]),
+		       tcp_nagle_str(tcp_nagle_setting[saddr, sport, daddr, dport]),
+		       tcp_delack_timer_cnt[saddr, sport, daddr, dport],
+		       tcp_keepalive_timer_cnt[saddr, sport, daddr, dport],
+		       tcp_write_timer_cnt[saddr, sport, daddr, dport])
+	}
+	print("end:\n")
+}
+
+probe timer.ms(5000)
+{
+	dump_stats()
+}
+
+probe end
+{
+	dump_stats()
+}
