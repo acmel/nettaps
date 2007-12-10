@@ -8,6 +8,13 @@
 %{
 #include <linux/in.h>
 #include <linux/ip.h>
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+static inline struct iphdr *ip_hdr(struct sk_buff *skb)
+{
+	return (struct iphdr *)skb->nh.raw;
+}
+#endif
 %}
 
 global IPPROTO_IP = 0		// Dummy protocol for TCP
@@ -34,15 +41,24 @@ global IPPROTO_RAW = 255	// Raw IP packets
 
 function skb_iphdr_saddr:long (skb:long)
 %{
-	THIS->__retvalue = ip_hdr((struct sk_buff *)THIS->skb)->saddr;
+	struct iphdr *iph = ip_hdr((struct sk_buff *)THIS->skb);
+
+	THIS->__retvalue = kread(&(iph))->saddr;
+	CATCH_DEREF_FAULT();
 %}
 
 function skb_iphdr_daddr:long (skb:long)
 %{
-	THIS->__retvalue = ip_hdr((struct sk_buff *)THIS->skb)->daddr;
+	struct iphdr *iph = ip_hdr((struct sk_buff *)THIS->skb);
+
+	THIS->__retvalue = kread(&(iph))->daddr;
+	CATCH_DEREF_FAULT();
 %}
 
 function skb_iphdr_protocol:long (skb:long)
 %{
-	THIS->__retvalue = ip_hdr((struct sk_buff *)THIS->skb)->protocol;
+	struct iphdr *iph = ip_hdr((struct sk_buff *)THIS->skb);
+
+	THIS->__retvalue = kread(&(iph))->protocol;
+	CATCH_DEREF_FAULT();
 %}

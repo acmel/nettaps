@@ -8,30 +8,45 @@
 %{
 #include <linux/in.h>
 #include <linux/tcp.h>
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+static inline struct tcphdr *tcp_hdr(struct sk_buff *skb)
+{
+	return (struct tcphdr *)skb->h.raw;
+}
+#endif
 %}
 
 function skb_tcphdr_sport:long (skb:long)
 %{
-	THIS->__retvalue = ntohs(tcp_hdr((struct sk_buff *)THIS->skb)->source);
+	struct tcphdr *tp = tcp_hdr((struct sk_buff *)THIS->skb);
+
+	THIS->__retvalue = kread(&(tp->source));
+	CATCH_DEREF_FAULT();
 %}
 
 function skb_tcphdr_dport:long (skb:long)
 %{
-	THIS->__retvalue = ntohs(tcp_hdr((struct sk_buff *)THIS->skb)->dest);
+	struct tcphdr *tp = tcp_hdr((struct sk_buff *)THIS->skb);
+
+	THIS->__retvalue = kread(&(tp->dest));
+	CATCH_DEREF_FAULT();
 %}
 
 function skb_iphdr_tcp_sport:long (skb:long)
 %{
 	struct iphdr *iph = ip_hdr((struct sk_buff *)THIS->skb);
-	struct tcphdr *th = (void *)iph + (iph->ihl * 4);
+	struct tcphdr *th = (void *)iph + iph->ihl * 4;
 
-	THIS->__retvalue = ntohs(th->source);
+	THIS->__retvalue = ntohs(kread(&(th->source)));
+	CATCH_DEREF_FAULT();
 %}
 
 function skb_iphdr_tcp_dport:long (skb:long)
 %{
 	struct iphdr *iph = ip_hdr((struct sk_buff *)THIS->skb);
-	struct tcphdr *th = (void *)iph + (iph->ihl * 4);
+	struct tcphdr *th = (void *)iph + iph->ihl * 4;
 
-	THIS->__retvalue = ntohs(th->dest);
+	THIS->__retvalue = ntohs(kread(&(th->dest)));
+	CATCH_DEREF_FAULT();
 %}
