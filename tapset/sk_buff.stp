@@ -21,5 +21,18 @@ function skb_take_tstamp(skb:long)
 	struct sk_buff *skb = (struct sk_buff *)THIS->skb;
 	
 	if (skb != NULL)
-		*(unsigned long *)&skb->tstamp = get_cycles_sync();
+		*(unsigned long *)&skb->tstamp = _stp_gettimeofday_ns();
+		//*(unsigned long *)&skb->tstamp = get_cycles_sync();
+%}
+
+function skb_loopback:long(skb:long)
+%{
+	struct sk_buff *skb = (struct sk_buff *)THIS->skb;
+	struct net_device *dev = kread(&(skb->dev));
+	
+	if (dev != NULL)
+		THIS->__retvalue = kread(&(dev->flags)) & IFF_LOOPBACK;
+	else
+		THIS->__retvalue = 0;
+	CATCH_DEREF_FAULT();
 %}
