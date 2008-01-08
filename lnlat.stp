@@ -70,7 +70,6 @@ probe dev_out = kernel.function("dev_hard_start_xmit")
 probe dev_in = kernel.function("netif_rx"), kernel.function("netif_receive_skb")
 {
 	skb = $skb
-	len = $skb->len
 }
 
 probe user_in = kernel.function("skb_copy_datagram_iovec"),
