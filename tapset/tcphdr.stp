@@ -8,11 +8,22 @@
 %{
 #include <linux/in.h>
 #include <linux/tcp.h>
+#include <linux/skbuff.h>
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,21)
 static inline struct tcphdr *tcp_hdr(struct sk_buff *skb)
 {
 	return (struct tcphdr *)skb->h.raw;
+}
+#else
+static inline unsigned char *skb_transport_header(const struct sk_buff *skb)
+{
+	return skb->head + skb->transport_header;
+}
+
+static inline struct tcphdr *tcp_hdr(struct sk_buff *skb)
+{
+	return (struct tcphdr *)skb_transport_header(skb);
 }
 #endif
 %}
