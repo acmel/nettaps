@@ -200,7 +200,10 @@ function dump_stats()
 	print("connection: tid saddr sport daddr dport nrbf avgbfsz minbfsz maxbfsz nrpkts avgpktsz minpktsz maxpktsz nagle da ka wr\n")
 
 	foreach ([tid+, saddr, sport, daddr, dport] in buffer_sizes) {
-		printf("connection: %u %s %u %s %u %u %u %u %u %u %u %u %u %s %u %u %u\n",
+		if (daddr != 0x100007f)
+			continue
+
+		printf("connection: %u %s %u %s %u %u %u %u %u",
 		       tid,
 		       inet_sk_ntop(saddr),
 		       sport,
@@ -209,15 +212,38 @@ function dump_stats()
 		       @count(buffer_sizes[tid, saddr, sport, daddr, dport]),
 		       @avg(buffer_sizes[tid, saddr, sport, daddr, dport]),
 		       @min(buffer_sizes[tid, saddr, sport, daddr, dport]),
-		       @max(buffer_sizes[tid, saddr, sport, daddr, dport]),
-		       @count(packet_sizes[tid, saddr, sport, daddr, dport]),
-		       @avg(packet_sizes[tid, saddr, sport, daddr, dport]),
-		       @min(packet_sizes[tid, saddr, sport, daddr, dport]),
-		       @max(packet_sizes[tid, saddr, sport, daddr, dport]),
-		       tcp_nagle_str(tcp_nagle_setting[saddr, sport, daddr, dport]),
-		       tcp_delack_timer_cnt[saddr, sport, daddr, dport],
-		       tcp_keepalive_timer_cnt[saddr, sport, daddr, dport],
-		       tcp_write_timer_cnt[saddr, sport, daddr, dport])
+		       @max(buffer_sizes[tid, saddr, sport, daddr, dport]))
+
+		if ([tid, saddr, sport, daddr, dport] in packet_sizes)
+			printf(" %u %u %u %u",
+			       @count(packet_sizes[tid, saddr, sport, daddr, dport]),
+			       @avg(packet_sizes[tid, saddr, sport, daddr, dport]),
+			       @min(packet_sizes[tid, saddr, sport, daddr, dport]),
+			       @max(packet_sizes[tid, saddr, sport, daddr, dport]))
+		else
+			print(" 0 0 0 0")
+
+		if ([saddr, sport, daddr, dport] in tcp_nagle_setting)
+			printf(" %s", tcp_nagle_str(tcp_nagle_setting[saddr, sport, daddr, dport]))
+		else
+			print(" -")
+
+		if ([saddr, sport, daddr, dport] in tcp_delack_timer_cnt)
+			printf(" %u", tcp_delack_timer_cnt[saddr, sport, daddr, dport])
+		else
+			print(" 0")
+
+		if ([saddr, sport, daddr, dport] in tcp_keepalive_timer_cnt)
+			printf(" %u", tcp_keepalive_timer_cnt[saddr, sport, daddr, dport])
+		else
+			print(" 0")
+
+		if ([saddr, sport, daddr, dport] in tcp_write_timer_cnt)
+			printf(" %u", tcp_write_timer_cnt[saddr, sport, daddr, dport])
+		else
+			print(" 0")
+
+		print("\n")
 	}
 	print("end:\n")
 }
