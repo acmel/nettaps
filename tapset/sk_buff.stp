@@ -22,7 +22,7 @@ function skb_take_tstamp(skb:long)
 	
 	if (skb != NULL)
 		*(unsigned long *)&skb->tstamp = _stp_gettimeofday_ns();
-		//*(unsigned long *)&skb->tstamp = get_cycles_sync();
+		// *(unsigned long *)&skb->tstamp = get_cycles_sync();
 %}
 
 function skb_loopback:long(skb:long)
