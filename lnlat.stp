@@ -1,4 +1,11 @@
 #!/usr/bin/stap
+# GPLv2 (C) Red Hat Inc.
+# Arnaldo Carvalho de Melo <acme@redhat.com>
+#
+# Run it with
+# stap -I tapset/ lnlat.stp
+# on RHEL kernels where the above fails, try with:
+# stap -I tapset/ -D RHEL_KERNEL=1 lnlat.stp
 
 global stats_latency
 global stats_bufsize
@@ -152,6 +159,11 @@ probe user_in
 {
 	if (protocol == IPPROTO_TCP)
 		add_sample("user_in", saddr, sport, daddr, dport, timestamp, len)
+}
+
+probe begin
+{
+	print("press control+C to exit and display local network stack latency stats\n")
 }
 
 probe end

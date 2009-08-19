@@ -10,6 +10,7 @@
 #include <linux/tcp.h>
 #include <linux/skbuff.h>
 
+#ifndef RHEL_KERNEL
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,21)
 static inline struct tcphdr *tcp_hdr(struct sk_buff *skb)
 {
@@ -25,6 +26,7 @@ static inline struct tcphdr *tcp_hdr(struct sk_buff *skb)
 {
 	return (struct tcphdr *)skb_transport_header(skb);
 }
+#endif
 #endif
 %}
 
